@@ -1,2 +1,7 @@
 
-clang/debug/main.o
+*.pdb
+*.o
+*.exe
+*.sh
+gcc/shipping/todo_finder
+todo_output.txt
