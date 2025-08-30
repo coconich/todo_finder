@@ -18,19 +18,21 @@ Currently, I just put a copy of the todo in the codebase src folder, then call i
 When finished, I will just have a copy in my utils folder within PATH, then call it as needed from wherever
 
 # building
-the build.bat script is meant for windows usage. call it with a compiler and config arg from the following choices
-  - Compiler: gcc, clang
-  - Config  : debug, shipping
+The build.bat script is a simple build system that builds for clang and gcc (using wsl).
+once running, it will run in a loop and let you continue to run/clean/rebuild as desired 
 
-so... build.bat gcc shipping
-      build.bat clang debug
-      ...
+call it with a compiler and config arg from the following choices 
+  - build.bat clang debug
+  - build.bat clang shipping
+  - build.bat gcc debug
+  - build.bat gcc shipping
 
-the gcc build is done using wsl
-this clang build assumes the following exists "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
-you can replace it with your path if needed within build_compiler_clang.bat
+the clang build script assumes the following is going to work, replace this path if needed for your installation
+  - "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 
-once running, the build scripts will run in a loop and let you continue to run/clean/rebuild 
+If you want to build with gcc on a non windows platform, just call build_compiler_gcc.sh with the config argument desired. the build.bat is just an interface to choose a config, (it sometimes has a lot more compilers/platform options)
+  - ./build_compiler_gcc.sh debug
+  - ./build_compiler_gcc.sh shipping
 
 # what's next?
 When basic user arguments are finished, you will be able to specify a directory or file and the way to traverse it. 
