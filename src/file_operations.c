@@ -30,6 +30,7 @@ bool FileOpen(File* file, const char* filename, const char* mode)
     if (!file)
     {
         LogDebug("FileOpen given null File structure.\n"); 
+        LogDebug("FileOpen, filepath: %s\n", filename); 
         return false;
     }
     
@@ -37,7 +38,7 @@ bool FileOpen(File* file, const char* filename, const char* mode)
     errno_t error = fopen_s(&file->fp, filename, mode);
     if (error)
     {
-        LogDebug("\n    Failed to open file %s (error: %d)\n", filename, error); 
+        LogDebug("FileOpen, Failed to open file %s (error: %d)\n", filename, error); 
         file->fp = 0;
         return false;
     }
@@ -45,7 +46,7 @@ bool FileOpen(File* file, const char* filename, const char* mode)
     file->fp = fopen(filename, mode);
     if (!file->fp) 
     { 
-        LogDebug("\n    Failed to open file %s (error: %d)\n", filename, strerror(errno)); 
+        LogDebug("FileOpen, Failed to open file %s (error: %d)\n", filename, strerror(errno)); 
         return false;
     }
 #endif 
@@ -65,6 +66,7 @@ usize FileWrite(MemoryBuffer* data, usize byte_count, File* file)
     if(!file->fp) 
     { 
         LogDebug("FileWrite, File structure has null FILE ptr.\n"); 
+        LogDebug("FileWrite, filepath: %.*s\n", ArrayCount(file->path), file->path); 
         return 0;
     }
 
@@ -82,6 +84,7 @@ usize FileRead(MemoryBuffer* destination, usize byte_count, File* file)
     if(!file->fp) 
     { 
         LogDebug("FileRead, File structure has null FILE ptr.\n"); 
+        LogDebug("FileRead, filepath: %.*s\n", ArrayCount(file->path), file->path); 
         return 0;
     }
     usize size = fread(destination->buffer, sizeof(char), byte_count, file->fp);
@@ -98,11 +101,13 @@ usize FilePuts(const char* string, File* file)
     if(!file->fp) 
     { 
         LogDebug("FilePuts, File structure has null FILE ptr.\n"); 
+        LogDebug("FilePuts, filepath: %.*s\n", ArrayCount(file->path), file->path); 
         return 0;
     }
     if(!string) 
     { 
         LogDebug("FilePuts Bad string parameter.\n"); 
+        LogDebug("FilePuts, filepath: %.*s\n", ArrayCount(file->path), file->path); 
         return 0;
     }
 
@@ -120,6 +125,7 @@ void FileClose(File* file)
     if(!file->fp) 
     { 
         LogDebug("FileClose, File structure has null FILE ptr.\n"); 
+        LogDebug("FileClose, filepath: %.*s\n", ArrayCount(file->path), file->path); 
         return;
     }
     fclose(file->fp);
@@ -127,8 +133,20 @@ void FileClose(File* file)
 
 usize GetFileContents(FileContents* file_contents, const char* filepath) 
 {
+    if(!file_contents) 
+    {
+        LogDebug("GetFileContents, null file_contents sructure\n");
+        LogDebug("GetFileContents, filepath: %s\n", filepath);
+        return 0;
+    }
+    if(!filepath) 
+    {
+        LogDebug("GetFileContents, null filepath\n");
+        return 0;
+    }
+    
     usize size = 0;
-    File file = { 0, "", "" };
+    File file = {0};
     
     file_contents->memory.buffer = 0;
     file_contents->memory.size = 0;
@@ -137,7 +155,8 @@ usize GetFileContents(FileContents* file_contents, const char* filepath)
     bool did_open = FileOpen(&file, filepath, "rb");
     if (!did_open || !file.fp)
     {
-        LogDebug("Failed to open file for bulk read\n"); 
+        LogDebug("GetFileContents, Failed to open file for bulk read\n"); 
+        LogDebug("GetFileContents, filepath: %s\n", filepath);
         return 0;
     }
 
@@ -148,8 +167,8 @@ usize GetFileContents(FileContents* file_contents, const char* filepath)
     if(size == 0) 
     {
         FileClose(&file);
-        LogDebug("fseek&ftell says file size == 0\n");
-        LogDebug("File path: %s\n", filepath);
+        LogDebug("GetFileContents, fseek&ftell says file size == 0\n");
+        LogDebug("GetFileContents, filepath: %s\n", filepath);
         return 0;
     }
     
@@ -157,8 +176,9 @@ usize GetFileContents(FileContents* file_contents, const char* filepath)
     usize read = FileRead(&file_contents->memory, size, &file);
     if(read != size) 
     {
-        LogDebug("Failed to read entire file contents");
-        LogDebug("Requested %lld , Got %lld", size, read);
+        LogDebug("GetFileContents, Failed to read entire file contents\n");
+        LogDebug("GetFileContents, Requested %lld , Got %lld\n", size, read);
+        LogDebug("GetFileContents, filepath: %s\n", filepath);
         FileClose(&file);
         Free(&file_contents->memory);
         return 0;
@@ -252,8 +272,37 @@ bool DirectoryNextEntry(DirectoryIterator* directory_iterator, DirectoryEntry* e
     }
 
     entry->name = directory_iterator->entry->d_name;
-    snprintf(entry->path, sizeof(entry->path), "%s/%s", directory_iterator->text_buffer, entry->name);
-
+    //snprintf(entry->path, sizeof(entry->path), "%s/%s", directory_iterator->text_buffer, entry->name);
+    
+    usize directory_length = StringLength(directory_iterator->text_buffer);
+    usize name_length = StringLength(entry->name);
+    if(directory_length + name_length + 2 > sizeof(entry->path))
+    {
+        LogDebug
+        (
+            "DirectoryNextEntry, huge file paths being combined, stopping directory iteration\n    %s\n    /%s\n",
+            directory_iterator->text_buffer, 
+            entry->name
+        ); 
+        return false;
+    }
+    
+    // directory/file
+    // or /file
+    if (directory_length > 0) 
+    {
+        memcpy(entry->path, directory_iterator->text_buffer, directory_length);
+        entry->path[directory_length] = '/';
+        memcpy(entry->path + directory_length + 1, entry->name, name_length + 1); // +1 for null terminator
+    } 
+    else 
+    {
+        entry->path[0] = '/';
+        memcpy(entry->path + 1, entry->name, name_length + 1);
+    }
+    
+    
+    
     // Determine file type
     struct stat statbuf;
     if (stat(entry->path, &statbuf) == 0) 
@@ -272,7 +321,7 @@ bool DirectoryNextEntry(DirectoryIterator* directory_iterator, DirectoryEntry* e
         }
     } 
     else 
-    {
+        {
         entry->type = FileType_Other;
     }
 #endif
