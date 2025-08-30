@@ -57,6 +57,7 @@
 //=====================================================================================================================
 // Basics
 //=====================================================================================================================
+typedef uint8_t u8;
 typedef int32_t s32;
 typedef uint32_t u32;
 typedef size_t usize;
@@ -175,8 +176,10 @@ void DirectoryClose(DirectoryIterator* iter);
 //=====================================================================================================================
 // C Strings
 //=====================================================================================================================
-usize StringCopy_NullTerminate(char* to, const char* from, usize last_index); // to[min(strlen(from), last_index] = '\0'
+usize StringCopy_NullTerminate(char* to, const char* from, usize max_chars_to_copy); // to[min(strlen(from), max_chars_to_copy] = '\0'
 usize StringLength(const char *string);
+s32 StringCompare(const char *left, const char* right);
+bool StringEndsWith(const char *string, const char* suffix);
 
 // Array of c strings
 // crashes on failure
@@ -188,6 +191,7 @@ typedef struct StringVector
 } StringVector;
 void StringVector_Init(StringVector* vec);
 void StringVector_PushBack(StringVector* vec, const char* string);
+void StringVector_PushArray(StringVector* vec, const char** array, usize count);
 void StringVector_Free(StringVector* vec);
 void StringVector_Sort(StringVector* vec);
 
@@ -198,6 +202,8 @@ typedef struct UserConfig
 {
     StringVector symbols;
     StringVector keywords;
+    StringVector ignore_directories;
+    StringVector ignore_extensions;
 }UserConfig;
 UserConfig* GetUserConfig();
 
@@ -213,10 +219,20 @@ typedef struct MessageBucket
     
 typedef struct MessageTable
 {
+    // table data
     MessageBucket* message_buckets;
+    
+    // from user config
+    // @todo:: replace with UserConfig? it makes the syntax longer for lookup...
     StringVector symbols;
     StringVector keywords;
+    StringVector ignore_directories;
+    StringVector ignore_extensions;
+    //
+    
+    // results
     StringVector skipped_directories;
+    StringVector skipped_files;
     StringVector empty_files;
 }MessageTable;
 
@@ -226,7 +242,6 @@ MessageTable* AllocateMessageTable(UserConfig* user_config);
 void FreeMessageTable(MessageTable* message_table);
 
 // fill the message table based 
-// 
 void ProcessUserRequest(MessageTable* message_table, s32 argc, char** argv);
 
 // what user request is calling with your desired input
@@ -235,11 +250,9 @@ void ProcessDirectory(MessageTable* message_table, const char* directory);
 
 void PrintSearchPatterns(MessageTable* message_table);
 void PrintIgnoredDirectories(MessageTable* message_table);
+void PrintIgnoredFiles(MessageTable* message_table);
 void PrintEmptyFiles(MessageTable* message_table);
 void PrintMessages(MessageTable* message_table);
-
-
-
 
 //=====================================================================================================================
 #endif // COMMON_H

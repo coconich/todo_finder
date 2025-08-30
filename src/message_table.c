@@ -35,69 +35,80 @@ static const char* default_keywords[] =
     "todo", "cleanup", "bug", "perf", "heap", "nocheckin", "fixme", "hack", "web", "broken"
 };
 
-typedef struct MessageType
+static const char* default_ignore_directories[] = 
 {
-    s32 symbol;
-    s32 keyword;
-}MessageType;
-MessageType CheckLineForMessages(MessageTable* message_table, const char* line);
+    ".svn", ".vs", ".git", "bin", "build", "bin-obj", "libs", "deps", "libraries", "dependencies", "dlls", "dll" 
+};
+
+static const char* default_ignore_extensions[] = 
+{
+    ".exe", ".o", ".obj", ".png", ".jpg", ".bmp", ".json", ".xml", ".lib", ".dll" 
+};
+
+
 
 MessageTable* AllocateMessageTable(UserConfig* user_config)
 {
-    static MessageTable message_table = {};
+    MessageTable* message_table = (MessageTable*)( malloc(sizeof(MessageTable)) );
+    if(!message_table) 
+    { 
+        LogDebug("AllocateMessageTable, failed to malloc message_table");
+        return 0; 
+    }
+    memset(message_table, 0, sizeof(MessageTable));
     
     // default table
     if(!user_config)
     {
-        StringVector_Init(&message_table.symbols);
-        StringVector_Init(&message_table.keywords);
+        StringVector_Init(&message_table->symbols);
+        StringVector_Init(&message_table->keywords);
+        StringVector_Init(&message_table->ignore_directories);
+        StringVector_Init(&message_table->ignore_extensions);
 
-        for (usize i = 0; i < ArrayCount(default_symbols); i++)
-        {
-            StringVector_PushBack(&message_table.symbols, default_symbols[i]);
-        }
-        for (usize i = 0; i < ArrayCount(default_keywords); i++)
-        {
-            StringVector_PushBack(&message_table.keywords, default_keywords[i]);
-        }
+        StringVector_PushArray(&message_table->symbols, default_symbols, ArrayCount(default_symbols));
+        StringVector_PushArray(&message_table->keywords, default_keywords, ArrayCount(default_keywords));
+        StringVector_PushArray(&message_table->ignore_directories, default_ignore_directories, ArrayCount(default_ignore_directories));
+        StringVector_PushArray(&message_table->ignore_extensions, default_ignore_extensions, ArrayCount(default_ignore_extensions));
     }
     else
     {
-        message_table.symbols = user_config->symbols;
-        message_table.keywords = user_config->keywords;
+        message_table->symbols = user_config->symbols;
+        message_table->keywords = user_config->keywords;
+        message_table->ignore_directories = user_config->ignore_directories;
+        message_table->ignore_extensions = user_config->ignore_extensions;
     }
 
-    if(message_table.symbols.size == 0 || message_table.keywords.size == 0)
+    if(message_table->symbols.size == 0 || message_table->keywords.size == 0)
     {
         LogDebug("empty symbol or keyword table");
         return 0;
     }
 
     // allocate each cell in the table
-    usize combination_count = message_table.symbols.size * message_table.keywords.size;
+    usize combination_count = message_table->symbols.size * message_table->keywords.size;
     usize bytes_needed = combination_count * sizeof(MessageBucket);
-    message_table.message_buckets = (MessageBucket*)(malloc(bytes_needed));
+    message_table->message_buckets = (MessageBucket*)(malloc(bytes_needed));
     
-    if (!message_table.message_buckets)
+    if (!message_table->message_buckets)
     {
         LogDebug("Failed to allocate message table text buffers");
         return 0;
     }
     
-    memset(message_table.message_buckets, 0, combination_count * sizeof(MessageBucket));
+    memset(message_table->message_buckets, 0, combination_count * sizeof(MessageBucket));
     
-    // init the cells
-    for (usize s = 0; s < message_table.symbols.size; s++)
+    // init the buckets
+    for (usize s = 0; s < message_table->symbols.size; s++)
     {
-        for (usize k = 0; k < message_table.keywords.size; k++) 
+        for (usize k = 0; k < message_table->keywords.size; k++) 
         {
-            usize type_index = s * message_table.keywords.size + k;
-            message_table.message_buckets[type_index].keyword = (s32)k;
-            message_table.message_buckets[type_index].symbol = (s32)s;
-            StringVector_Init(&message_table.message_buckets[type_index].strings);
+            usize type_index = s * message_table->keywords.size + k;
+            message_table->message_buckets[type_index].keyword = (s32)k;
+            message_table->message_buckets[type_index].symbol = (s32)s;
+            StringVector_Init(&message_table->message_buckets[type_index].strings);
         }
     }
-    return &message_table;  
+    return message_table;  
 }
 
 void FreeMessageTable(MessageTable* message_table)
@@ -118,7 +129,9 @@ void FreeMessageTable(MessageTable* message_table)
         }
         StringVector_Free(&message_table->symbols);
         StringVector_Free(&message_table->keywords);
+        free(message_table);
     }
+    
 }
 
 
@@ -135,15 +148,48 @@ void ProcessUserRequest(MessageTable* message_table, s32 argc, char** argv)
     ProcessDirectory(message_table, directory);
 }
 
-
-
-
-MessageType CheckLineForMessages(MessageTable* message_table, const char* line)
+// returns -1 if the file's extension is not in the extension list in the table
+static s32 FindIgnoreExtensionIndex(MessageTable* message_table, const char* file)
 {
-    MessageType pair;
-    pair.symbol = -1;
-    pair.keyword = -1;
-    if(!message_table) { return pair; }
+    if(!message_table || !file) { return false; }
+    for(s32 i = 0; i < message_table->ignore_extensions.size; ++i)
+    {
+        const char* extension = message_table->ignore_extensions.data[i];
+        if(StringEndsWith(file, extension))
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static s32 FindIgnoreDirectoryIndex(MessageTable* message_table, const char* directory)
+{
+    if(!message_table || !directory) { return -1; }
+    for(s32 i = 0; i < message_table->ignore_directories.size; ++i)
+    {
+        if(StringCompare(directory, message_table->ignore_directories.data[i]) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+typedef struct ProcessLineResults
+{
+    s32 symbol_index;
+    s32 keyword_index;
+    const char* at_pos;
+}ProcessLineResults;
+
+ProcessLineResults ProcessLine(MessageTable* message_table, const char* line)
+{
+    ProcessLineResults results;
+    results.symbol_index = -1;
+    results.keyword_index = -1;
+    results.at_pos = 0;
+    if(!message_table) { return results; }
  
     for (usize s = 0; s < message_table->symbols.size; s++) 
     {
@@ -152,7 +198,6 @@ MessageType CheckLineForMessages(MessageTable* message_table, const char* line)
             // looking for keyword+pattern, like @todo
             char pattern[64];
             snprintf(pattern, sizeof(pattern), "%s%s", message_table->symbols.data[s], message_table->keywords.data[k]);
-            
             char* found = strstr(line, pattern); // @todo:: write myself, find needle in haystack
             if (found) 
             {
@@ -161,17 +206,16 @@ MessageType CheckLineForMessages(MessageTable* message_table, const char* line)
                 bool is_alnum = isalpha(next_char) || isdigit(next_char);
                 if (!is_alnum && next_char != '_') 
                 {
-                    pair.symbol = (s32)s;
-                    pair.keyword = (s32)k;
-                    return pair;
+                    results.symbol_index = (s32)s;
+                    results.keyword_index = (s32)k;
+                    results.at_pos = found;
+                    return results;
                 }
             }
         }
     }
-    return pair;
+    return results;
 }
-
-
 
 void ProcessFile(MessageTable* message_table, const char* filename) 
 {
@@ -202,22 +246,15 @@ void ProcessFile(MessageTable* message_table, const char* filename)
             memcpy(line, current, line_len);
             line[line_len] = '\0';
             
-            MessageType pair = CheckLineForMessages(message_table, line);
-            s32 symbol = pair.symbol;
-            s32 keyword = pair.keyword;
-            if (symbol != -1 && keyword != -1) 
+            ProcessLineResults results = ProcessLine(message_table, line);
+            if (results.at_pos) 
             {
-                char current_symbol = *message_table->symbols.data[symbol];
-                char* at_pos = strchr(line, current_symbol); // todo:: replace, return ptr to first occurance of char
-                if (at_pos) 
-                {
-                    // Prepare output
-                    char buffer[1024];
-                    usize length = StringLength(filename);
-                    snprintf(buffer, sizeof(buffer), "%-48.*s %4d: %s\n", (s32)(length), filename, line_number, at_pos);
-                    usize type_index = symbol * message_table->keywords.size + keyword;
-                    StringVector_PushBack(&message_table->message_buckets[type_index].strings, buffer);
-                }
+                // Prepare output
+                char buffer[1024];
+                usize length = StringLength(filename);
+                snprintf(buffer, sizeof(buffer), "%-48.*s %4d: %s\n", (s32)(length), filename, line_number, results.at_pos);
+                usize type_index = results.symbol_index * message_table->keywords.size + results.keyword_index;
+                StringVector_PushBack(&message_table->message_buckets[type_index].strings, buffer);
             }
         }
         
@@ -229,6 +266,7 @@ void ProcessFile(MessageTable* message_table, const char* filename)
 
     FreeFileContents(&contents);
 }
+
 
 void ProcessDirectory(MessageTable* message_table, const char* directory) 
 {
@@ -244,41 +282,57 @@ void ProcessDirectory(MessageTable* message_table, const char* directory)
     while (DirectoryNextEntry(&directory_iterator, &current_entry)) 
     {
         const char* filename = current_entry.name;
-
-        if (strcmp(filename, ".") == 0 || 
-            strcmp(filename, "..") == 0 ||
-            strcmp(filename, log_file_name) == 0)
+        if(!filename) 
+        {
+            LogDebug("ProcessDirectory, directory iterator got null file, skipping");
+            continue;
+        }
+        
+        
+        if (StringCompare(filename, ".") == 0 || 
+            StringCompare(filename, "..") == 0 ||
+            StringCompare(filename, log_file_name) == 0)
         {
             continue;
         }
-        else if(strcmp(filename, ".svn") == 0 || 
-                strcmp(filename, ".vs") == 0 || 
-                strcmp(filename, "bin") == 0 || 
-                strcmp(filename, "bin-obj") == 0 || 
-                strcmp(filename, "libs") == 0 || 
-                strcmp(filename, "deps") == 0)
-        { 
-            StringVector_PushBack(&message_table->skipped_directories, filename);
-            continue; 
-        }
+
 
         if (current_entry.type == FileType_Directory) 
         {
-            ProcessDirectory(message_table, current_entry.path);
+            s32 directory_ignore_index = FindIgnoreDirectoryIndex(message_table, filename);
+            if(directory_ignore_index == -1)
+            {        
+                ProcessDirectory(message_table, current_entry.path);
+            }
+            else
+            {
+                StringVector_PushBack(&message_table->skipped_directories, filename);
+            }
+            
         } 
         else if (current_entry.type == FileType_File) 
         {
-            ProcessFile(message_table, current_entry.path);
+            s32 ignore_extension_index = FindIgnoreExtensionIndex(message_table, filename);
+            if(ignore_extension_index == -1)
+            {        
+                ProcessFile(message_table, current_entry.path);
+            }
+            else
+            {
+                StringVector_PushBack(&message_table->skipped_files, filename);
+            }
         }
     }
     
     DirectoryClose(&directory_iterator);
 }
 
-
+//=====================================================================================================================
+// Output
+//=====================================================================================================================
 void PrintSearchPatterns(MessageTable* message_table)
-{
-    // Tell the user what is being searched for
+{   
+    // @todo:: actually print out the combinations not just my basic @ combos
     Log("Finding all instances of [symbol][keyword]:\n\n");
     for(usize i = 0; i < message_table->keywords.size; ++i)
     {
@@ -286,32 +340,58 @@ void PrintSearchPatterns(MessageTable* message_table)
     }
     Log("\n");
 }
-
 void PrintIgnoredDirectories(MessageTable* message_table)
 {
-    // tell the users which directories were auto skipped
-    // @todo:: let them know they can edit a config to change this
     Log("Ignored Directories:\n\n");
     for(usize i = 0; i < message_table->skipped_directories.size; ++i)
     {
-        Log("   %s\n", message_table->skipped_directories.data[i]);
+        Log("    %s\n", message_table->skipped_directories.data[i]);
     }
     Log("\n");
 }
-
+void PrintIgnoredFiles(MessageTable* message_table)
+{
+    s32 extension_count = message_table->ignore_extensions.size;
+    s32* counts = malloc(extension_count * sizeof(s32));
+    if(!counts) { return; }
+    
+    for(s32 i = 0; i < extension_count; ++i)
+    {
+        counts[i] = 0;
+    }
+    
+    Log("Ignored Files:\n\n");
+    for(usize i = 0; i < message_table->skipped_files.size; ++i)
+    {
+        s32 index = FindIgnoreExtensionIndex(message_table, message_table->skipped_files.data[i]);
+        if(index >= 0 && index < extension_count)
+        {
+            counts[index]++;
+        }
+    }
+    
+    for(usize i = 0; i < extension_count; ++i)
+    { 
+        if(counts[i] > 0)
+        {
+            Log("    %-16s (%d)\n", message_table->ignore_extensions.data[i],counts[i]);
+        }
+    }
+    Log("\n");
+    
+    free(counts);
+}
 void PrintEmptyFiles(MessageTable* message_table)
 {
     Log("Empty Files:\n\n");
     for(usize i = 0; i < message_table->empty_files.size; ++i)
     {
-        Log("   %s\n", message_table->empty_files.data[i]);
+        Log("    %s\n", message_table->empty_files.data[i]);
     }
     Log("\n");
 }
-
 void PrintMessages(MessageTable* message_table)
 {
-    // pretty print out the messages in table 
     for (usize s = 0; s < message_table->symbols.size; s++) 
     {
         for (usize k = 0; k < message_table->keywords.size; k++) 

@@ -64,12 +64,15 @@ s32 main(s32 argc, char** argv)
     // show the user the results
     PrintSearchPatterns(message_table);
     PrintIgnoredDirectories(message_table);
+    PrintIgnoredFiles(message_table);
     PrintEmptyFiles(message_table);
     PrintMessages(message_table);
+    
 
     Log("=======================================================================================================================\n\n");
 
     // clean up and call global destructors
     FreeMessageTable(message_table);
     Exit(0);
+    
 }
