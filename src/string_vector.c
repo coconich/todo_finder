@@ -73,6 +73,15 @@ void StringVector_PushBack(StringVector* vec, const char* string)
     vec->size++;
 }
 
+void StringVector_PushArray(StringVector* vec, const char** array, usize count)
+{
+    for (usize i = 0; i < count; i++)
+    {
+        StringVector_PushBack(vec, array[i]);
+    }
+}
+
+
 void StringVector_Free(StringVector* vec) 
 {
     for (usize i = 0; i < vec->size; i++) { free(vec->data[i]); }
@@ -83,7 +92,7 @@ void StringVector_Free(StringVector* vec)
 }
 
 
-s32 Compare_CString(const void* a, const void* b) { return strcmp(*(const char**)a, *(const char**)b); }
+s32 Compare_CString(const void* a, const void* b) { return StringCompare(*(const char**)a, *(const char**)b); }
 
 void StringVector_Sort(StringVector* vec)
 {

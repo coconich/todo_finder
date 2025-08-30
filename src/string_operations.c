@@ -32,16 +32,42 @@ usize StringLength(const char *string)
     return length;
 }
 
-usize StringCopy_NullTerminate(char* to, const char* from, usize last_index) 
+usize StringCopy_NullTerminate(char* to, const char* from, usize max_chars_to_copy) 
 {
-    if(last_index <= 0) { return 0; }
+    if(max_chars_to_copy <= 0) { return 0; }
     
     usize count = 0;
-    while((count < last_index - 1) && from[count]) 
+    while((count < max_chars_to_copy - 1) && from[count]) 
     {
         to[count] = from[count];
         count++;    
     }
     to[count] = '\0';
     return count;
+}
+
+s32 StringCompare(const char *left, const char* right)
+{
+    while (*left != '\0' && *right != '\0') 
+    {
+        if (*left != *right) { return (u8)(*left) - (u8)(*right); }
+        left++;
+        right++;
+    }
+    return (u8)(*left) - (u8)(*right);
+}
+
+
+bool StringEndsWith(const char *string, const char* suffix)
+{
+    if(!string || !suffix) { return false; }
+    
+    usize string_length = StringLength(string);
+    usize suffix_length = StringLength(suffix);
+    
+    if(suffix_length == 0) { return false; }
+    if(suffix_length > string_length) { return false; }
+    
+    usize suffix_start_index = string_length - suffix_length;
+    return StringCompare(&string[suffix_start_index], suffix) == 0;
 }
