@@ -3,5 +3,9 @@
 *.o
 *.exe
 *.sh
-gcc/shipping/todo_finder
+*.ilk
+*.rdi
+/gcc
+/clang
+/msvc
 todo_output.txt
