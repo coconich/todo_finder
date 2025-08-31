@@ -3,7 +3,7 @@ command line tool to find [symbol][keyword] combos in your files
 <img width="890" height="899" alt="image" src="https://github.com/user-attachments/assets/3ca9c214-68a2-4a44-8214-4ec147275427" />
 
 # usage
-I leave comments all over my codebases like these
+I like to leave comments all over my codebases like these
 ```c
 // @todo:: fix this bug
 // @cleanup
@@ -13,13 +13,14 @@ I leave comments all over my codebases like these
 // @hack:: what?!?!
 // ...
 ```
-running the todo_finder in a directory will search from there into all subfolders for default [symbol][keyword] combos
-Currently, I just put a copy of the todo in the codebase src folder, then call into with a key binding in my editor to quickly get a printout while working
-When finished, I will just have a copy in my utils folder within PATH, then call it as needed from wherever
+Running the todo_finder in a directory will search from the working directory into all subfolders for default [symbol][keyword] combos.
+
+Currently, I just put a copy of the todo in the codebase src folder, then call into with a key binding in my editor to quickly get a printout while working.
+
+Eventually, the user config will be able to specify what to search for, and the program args will be able to specify where to search.
 
 # building
-The build.bat script is a simple build system that builds for clang and gcc (using wsl).
-once running, it will run in a loop and let you continue to run/clean/rebuild as desired 
+The build.bat script is a simple build system that builds for clang and gcc (using wsl). Once running, it will run in a loop and let you continue to run/clean/rebuild as desired. 
 
 call it with a compiler and config arg from the following choices 
   - build.bat clang debug
