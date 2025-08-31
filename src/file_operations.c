@@ -280,14 +280,14 @@ bool DirectoryNextEntry(DirectoryIterator* directory_iterator, DirectoryEntry* e
     {
         LogDebug
         (
-            "DirectoryNextEntry, huge file paths being combined, stopping directory iteration\n    %s\n    /%s\n",
+            "DirectoryNextEntry, huge file paths being combined, stopping directory_info iteration\n    %s\n    /%s\n",
             directory_iterator->text_buffer, 
             entry->name
         ); 
         return false;
     }
     
-    // directory/file
+    // directory_info/file
     // or /file
     if (directory_length > 0) 
     {
@@ -341,7 +341,53 @@ void DirectoryClose(DirectoryIterator* directory_iterator)
     if (directory_iterator->dir) 
     {
         closedir(directory_iterator->dir);
-        directory_iterator->dir = NULL;
+        directory_iterator->dir = 0;
     }
 #endif
+}
+
+
+static u32 GetDirectoryPermissions(const char* path) 
+{
+    u32 permissions = 0;
+    
+#ifdef OS_Win32
+    DWORD attr = GetFileAttributesA(path);
+    if (attr == INVALID_FILE_ATTRIBUTES) { return 0; }
+    
+    if (attr & FILE_ATTRIBUTE_DIRECTORY) 
+    {
+        permissions |= PERMISSIONS_EXISTS;
+        if (access(path, R_OK) == 0) { permissions |= PERMISSIONS_READ; }
+        if (access(path, W_OK) == 0) { permissions |= PERMISSIONS_WRITE; }
+        if (permissions & PERMISSIONS_READ) { permissions |= PERMISSIONS_EXEC; }
+    }
+#else
+    struct stat statbuf;
+    if (stat(path, &statbuf) != 0) { return 0; }
+    if (S_ISDIR(statbuf.st_mode)) 
+    {
+        permissions |= PERMISSIONS_EXISTS;        
+        if (access(path, R_OK) == 0) { permissions |= PERMISSIONS_READ; }
+        if (access(path, W_OK) == 0) { permissions |= PERMISSIONS_WRITE; }
+        if (access(path, X_OK) == 0) { permissions |= PERMISSIONS_EXEC; }
+    }
+#endif
+    
+    return permissions;
+}
+
+bool GetCurrentDirectoryInfo(DirectoryInfo* directory_info) 
+{
+    if (directory_info == 0) { return false; }
+    
+    if (!getcwd(directory_info->path, MaxPath)) 
+    {
+        StringCopy_NullTerminate(directory_info->path, "Unknown", MaxPath);
+        directory_info->permissions = 0;
+        return false; 
+    }
+    
+    directory_info->permissions = GetDirectoryPermissions(directory_info->path);
+    return true; 
 }

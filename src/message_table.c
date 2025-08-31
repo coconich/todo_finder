@@ -76,6 +76,7 @@ MessageTable* AllocateMessageTable(UserConfig* user_config)
         message_table->keywords = user_config->keywords;
         message_table->ignore_directories = user_config->ignore_directories;
         message_table->ignore_extensions = user_config->ignore_extensions;
+        free(user_config);
     }
 
     if(message_table->symbols.size == 0 || message_table->keywords.size == 0)
@@ -270,8 +271,8 @@ void ProcessFile(MessageTable* message_table, const char* filename)
 
 void ProcessDirectory(MessageTable* message_table, const char* directory) 
 {
-    DirectoryIterator directory_iterator;
-    DirectoryEntry current_entry;
+    DirectoryIterator directory_iterator = {0};
+    DirectoryEntry current_entry = {0};
     
     if (!DirectoryOpen(&directory_iterator, directory)) 
     {

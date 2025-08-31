@@ -33,6 +33,12 @@
     #define OS_Win32
     #include <windows.h>
     #include <direct.h>
+    #include <io.h>
+    #define getcwd _getcwd
+    #define access _access
+    #define R_OK 4
+    #define W_OK 2
+    #define X_OK 1
 #else
     #include <dirent.h>
     #include <sys/stat.h>
@@ -149,6 +155,19 @@ typedef enum
 
 typedef struct 
 {
+    char path[MaxPath];
+    u32 permissions; 
+} DirectoryInfo;
+
+#define PERMISSIONS_READ   0x01
+#define PERMISSIONS_WRITE  0x02
+#define PERMISSIONS_EXEC   0x04
+#define PERMISSIONS_EXISTS 0x08
+
+bool GetCurrentDirectoryInfo(DirectoryInfo* directory);
+
+typedef struct 
+{
     const char* name;
     FileType type;
     char path[MaxPath];
@@ -200,6 +219,7 @@ void StringVector_Sort(StringVector* vec);
 //=====================================================================================================================
 typedef struct UserConfig
 {
+    char path[MaxPath];
     StringVector symbols;
     StringVector keywords;
     StringVector ignore_directories;
